@@ -499,7 +499,7 @@ export default function App() {
         </div>
         <div style={S.sideFoot}>
           <div style={{ fontSize: 11, color: "#6f6f68", lineHeight: 1.6 }}>
-            {ROOM_COUNT} rooms · 08:00–20:00<br />Bonus {Math.round(THERAPIST_BONUS_RATE * 100)}%
+            {ROOM_COUNT} rooms · 08:00–21:00<br />Bonus {Math.round(THERAPIST_BONUS_RATE * 100)}%
           </div>
         </div>
       </aside>
