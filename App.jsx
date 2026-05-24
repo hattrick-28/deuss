@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LayoutGrid, Calendar as CalIcon, Users, Euro, History as HistoryIcon, CircleCheck as CheckCircle2, Circle as XCircle, CalendarDays, Plus, Trash2, Clock, MapPin, TrendingUp, Award, X, ChevronLeft, ChevronRight, CreditCard as Edit3, Package } from "lucide-react";
+import { LayoutGrid, Calendar as CalIcon, Users, Euro, History as HistoryIcon, CircleCheck as CheckCircle2, Circle as XCircle, CalendarDays, Plus, Trash2, Clock, MapPin, TrendingUp, Award, X, ChevronLeft, ChevronRight, CreditCard as Edit3, Package, LogOut, LogIn } from "lucide-react";
 import { supabase } from "./src/lib/supabase";
 
 /* ============================================================
@@ -137,15 +137,37 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null); // booking awaiting cancel confirmation
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
 
-  const log = async (type, message) => {
-    const entry = { type, message };
-    const { error } = await supabase.from("history").insert([entry]);
-    if (error) console.error(error);
-    setHistory((h) => [{ id: uid(), type, message, ts: Date.now() }, ...h].slice(0, 500));
-  };
-
+  // Check initial auth state
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load data when user is authenticated
+  useEffect(() => {
+    if (!user) {
+      setClients([]);
+      setBookings([]);
+      setHistory([]);
+      setLoaded(false);
+      return;
+    }
     (async () => {
       const [c, b, h] = await Promise.all([
         loadClients(),
@@ -155,7 +177,55 @@ export default function App() {
       setClients(c.map(migrateClient)); setBookings(b); setHistory(h);
       setLoaded(true);
     })();
-  }, []);
+  }, [user]);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError("");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: loginPassword,
+    });
+    if (error) {
+      if (error.message.includes("Invalid login credentials")) {
+        setLoginError("Invalid email or password");
+      } else {
+        setLoginError(error.message);
+      }
+      return;
+    }
+    setShowLogin(false);
+    setLoginEmail("");
+    setLoginPassword("");
+  };
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    setLoginError("");
+    const { error } = await supabase.auth.signUp({
+      email: loginEmail,
+      password: loginPassword,
+    });
+    if (error) {
+      setLoginError(error.message);
+      return;
+    }
+    setLoginError("Account created! You can now log in.");
+    setIsSignUp(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setLoaded(false);
+  };
+
+  const log = async (type, message) => {
+    const entry = { type, message };
+    const { error } = await supabase.from("history").insert([entry]);
+    if (error) console.error(error);
+    setHistory((h) => [{ id: uid(), type, message, ts: Date.now() }, ...h].slice(0, 500));
+  };
 
   /* ----- Client operations ----- */
   const addClient = async (data) => {
@@ -377,6 +447,46 @@ export default function App() {
     { id: "history", label: "History", icon: HistoryIcon },
   ];
 
+  if (authLoading) {
+    return (
+      <div style={{ ...S.app, alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "#9b9b95", fontSize: 16 }}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={{ ...S.app, alignItems: "center", justifyContent: "center" }}>
+        <style>{CSS}</style>
+        <div style={S.loginCard}>
+          <div style={S.loginHeader}>
+            <div style={S.brandName}>Deuss Studio</div>
+            <div style={S.brandSub}>MASSAGE CRM</div>
+          </div>
+          <div style={S.navDivider} />
+          <form onSubmit={isSignUp ? handleSignUp : handleLogin} style={{ marginTop: 24 }}>
+            <Field label="Email">
+              <input className="inp" style={S.input} type="email" value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@deuss.com" required />
+            </Field>
+            <Field label="Password">
+              <input className="inp" style={S.input} type="password" value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" required />
+            </Field>
+            {loginError && <div style={{ ...S.errBox, marginTop: 8 }}>{loginError}</div>}
+            <button className="goldbtn" style={{ ...S.goldBtn, width: "100%", marginTop: 16, justifyContent: "center" }} type="submit">
+              <LogIn size={16} /> {isSignUp ? "Create Account" : "Sign In"}
+            </button>
+          </form>
+          <button className="mini" style={{ ...S.miniGhost, width: "100%", marginTop: 12 }} onClick={() => { setIsSignUp(!isSignUp); setLoginError(""); }}>
+            {isSignUp ? "Already have an account? Sign in" : "Need an account? Sign up"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.app}>
       <style>{CSS}</style>
@@ -401,6 +511,13 @@ export default function App() {
             );
           })}
         </nav>
+        <div style={{ ...S.navDivider, marginTop: "auto" }} />
+        <div style={{ padding: "0 14px 14px" }}>
+          <button className="navbtn" onClick={handleLogout} style={{ ...S.navBtn, width: "100%" }}>
+            <LogOut size={18} color="#9b9b95" strokeWidth={1.8} />
+            <span style={{ color: "#cfcfc8" }}>Sign out</span>
+          </button>
+        </div>
         <div style={S.sideFoot}>
           <div style={{ fontSize: 11, color: "#6f6f68", lineHeight: 1.6 }}>
             {ROOM_COUNT} rooms · 08:00–20:00<br />Bonus {Math.round(THERAPIST_BONUS_RATE * 100)}%
@@ -1405,6 +1522,8 @@ function Field({ label, children, style }) {
    ============================================================ */
 const S = {
   app: { display: "flex", minHeight: "100vh", background: "#0c0b0a", color: "#e9e4d6", fontFamily: "'Outfit', sans-serif" },
+  loginCard: { background: "linear-gradient(160deg, #16140f, #100f0d)", border: "1px solid #25221c", borderRadius: 18, padding: 32, width: "100%", maxWidth: 400, boxShadow: "0 30px 80px rgba(0,0,0,0.6)" },
+  loginHeader: { textAlign: "center", marginBottom: 8 },
   sidebar: { width: 248, minWidth: 248, background: "#100f0d", borderRight: "1px solid #211f1b", display: "flex", flexDirection: "column", padding: "0 0 18px" },
   brand: { padding: "26px 22px 18px" },
   brandName: { fontFamily: "'Cormorant Garamond', serif", fontSize: 26, fontWeight: 600, color: GOLD, letterSpacing: 0.3, lineHeight: 1 },
