@@ -139,11 +139,9 @@ export default function App() {
   const [cancelTarget, setCancelTarget] = useState(null); // booking awaiting cancel confirmation
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [showLogin, setShowLogin] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
 
   // Check initial auth state
   useEffect(() => {
@@ -194,24 +192,8 @@ export default function App() {
       }
       return;
     }
-    setShowLogin(false);
     setLoginEmail("");
     setLoginPassword("");
-  };
-
-  const handleSignUp = async (e) => {
-    e.preventDefault();
-    setLoginError("");
-    const { error } = await supabase.auth.signUp({
-      email: loginEmail,
-      password: loginPassword,
-    });
-    if (error) {
-      setLoginError(error.message);
-      return;
-    }
-    setLoginError("Account created! You can now log in.");
-    setIsSignUp(false);
   };
 
   const handleLogout = async () => {
@@ -465,7 +447,7 @@ export default function App() {
             <div style={S.brandSub}>MASSAGE CRM</div>
           </div>
           <div style={S.navDivider} />
-          <form onSubmit={isSignUp ? handleSignUp : handleLogin} style={{ marginTop: 24 }}>
+          <form onSubmit={handleLogin} style={{ marginTop: 24 }}>
             <Field label="Email">
               <input className="inp" style={S.input} type="email" value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@deuss.com" required />
@@ -476,12 +458,9 @@ export default function App() {
             </Field>
             {loginError && <div style={{ ...S.errBox, marginTop: 8 }}>{loginError}</div>}
             <button className="goldbtn" style={{ ...S.goldBtn, width: "100%", marginTop: 16, justifyContent: "center" }} type="submit">
-              <LogIn size={16} /> {isSignUp ? "Create Account" : "Sign In"}
+              <LogIn size={16} /> Sign In
             </button>
           </form>
-          <button className="mini" style={{ ...S.miniGhost, width: "100%", marginTop: 12 }} onClick={() => { setIsSignUp(!isSignUp); setLoginError(""); }}>
-            {isSignUp ? "Already have an account? Sign in" : "Need an account? Sign up"}
-          </button>
         </div>
       </div>
     );
