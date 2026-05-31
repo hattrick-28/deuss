@@ -27,13 +27,13 @@ const ROOM_COUNT = ROOMS.length;
 const THERAPIST_BONUS_RATE = 0.30; // 30% profit to physiotherapist
 const SESSION_MIN = 60; // each session lasts 60 minutes
 
-// Hourly grid rows shown in the calendar (08:00 .. 20:00)
+// Hourly grid rows shown in the calendar (08:00 .. 21:00)
 const HOURS = [];
-for (let h = 8; h <= 20; h++) HOURS.push(`${String(h).padStart(2, "0")}:00`);
+for (let h = 8; h <= 21; h++) HOURS.push(`${String(h).padStart(2, "0")}:00`);
 
-// Bookable start times in 30-min steps (08:00 .. 19:30 so a 60-min session ends by 20:30)
+// Bookable start times in 30-min steps (08:00 .. 20:00 so a 60-min session ends by 21:00)
 const SLOTS = [];
-for (let m = 8 * 60; m <= 19 * 60 + 30; m += 30) {
+for (let m = 8 * 60; m <= 20 * 60; m += 30) {
   SLOTS.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
 }
 
@@ -499,7 +499,7 @@ export default function App() {
         </div>
         <div style={S.sideFoot}>
           <div style={{ fontSize: 11, color: "#6f6f68", lineHeight: 1.6 }}>
-            {ROOM_COUNT} rooms · 08:00–20:00<br />Bonus {Math.round(THERAPIST_BONUS_RATE * 100)}%
+            {ROOM_COUNT} rooms · 08:00–21:00<br />Bonus {Math.round(THERAPIST_BONUS_RATE * 100)}%
           </div>
         </div>
       </aside>
@@ -902,7 +902,7 @@ function CalendarView({ bookings, clients, onAdd, onComplete, onCancel, onMove, 
       <div style={S.pageHead}>
         <div>
           <h1 style={S.h1}>Calendar</h1>
-          <p style={S.sub}>{ROOM_COUNT} rooms · 08:00–20:00 · 30-min slots · 1-hour sessions</p>
+          <p style={S.sub}>{ROOM_COUNT} rooms · 08:00–21:00 · 30-min slots · 1-hour sessions</p>
         </div>
         <button className="goldbtn" style={S.goldBtn} onClick={() => { setPreset(null); setOpen(true); }}>
           <Plus size={16} /> New booking
