@@ -883,9 +883,12 @@ function CalendarView({ bookings, clients, onAdd, onComplete, onCancel, onMove, 
     dayBookings.find((b) => b.room === room && toMin(b.time) < toMin(rowHour) && coversRow(b.time, rowHour));
 
   const shiftDay = (delta) => {
-    const d = new Date(date + "T00:00:00");
-    d.setDate(d.getDate() + delta);
-    setDate(d.toISOString().slice(0, 10));
+    const currentDate = new Date(date);
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + delta);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    setDate(`${year}-${month}-${day}`);
   };
 
   const openSlot = (time, room) => {
