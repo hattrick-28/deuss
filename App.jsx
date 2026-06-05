@@ -80,6 +80,7 @@ async function loadBookings() {
     status: b.status,
     revenue: Number(b.revenue) || 0,
     packageId: b.package_id,
+    isLegacy: b.is_legacy || false,
     createdAt: new Date(b.created_at).getTime(),
   }));
 }
@@ -337,7 +338,9 @@ export default function App() {
   /* ----- Booking operations ----- */
   const addBooking = async (data) => {
     const client = clients.find((c) => c.id === data.clientId);
-    const pkg = client?.packages.find((p) => p.id === data.packageId);
+    const pkg = data.isLegacy
+      ? client?.legacy_packages?.find((p) => p.id === data.packageId)
+      : client?.packages?.find((p) => p.id === data.packageId);
     const booking = {
       client_id: data.clientId,
       package_id: data.packageId,
@@ -348,7 +351,8 @@ export default function App() {
       date: data.date,
       time: data.time,
       status: "booked",
-      revenue: pkg?.perSession || 0,
+      revenue: data.isLegacy ? 0 : (pkg?.perSession || 0),
+      is_legacy: data.isLegacy || false,
     };
     const { data: inserted, error } = await supabase.from("bookings").insert([booking]).select();
     if (error) { console.error(error); return; }
@@ -366,6 +370,7 @@ export default function App() {
       revenue: Number(saved.revenue) || 0,
       packageId: saved.package_id,
       createdAt: new Date(saved.created_at).getTime(),
+      isLegacy: data.isLegacy || false,
     }]);
     log("booking_added",
       `Booked ${saved.client_name} (${saved.service}) with ${saved.therapist} • ${saved.room} • ${niceDate(saved.date)} ${saved.time}`);
@@ -378,27 +383,47 @@ export default function App() {
     if (error) { console.error(error); return; }
     setBookings((b) => b.map((x) => (x.id === id ? { ...x, status: "done" } : x)));
     let counter = "";
-    // increment sessions used on the matching package
+    // increment sessions used on the matching package (regular or legacy)
     const client = clients.find((c) => c.id === done.clientId);
     if (client) {
-      const updatedPackages = client.packages.map((p) => {
-        if (p.id !== done.packageId) return p;
-        const used = Math.min(p.sessions, p.sessionsUsed + 1);
-        counter = `${used}/${p.sessions}`;
-        return { ...p, sessionsUsed: used };
-      });
-      await supabase.from("clients").update({ packages: updatedPackages }).eq("id", done.clientId);
-      setClients((c) => c.map((cl) => {
-        if (cl.id !== done.clientId) return cl;
-        return { ...cl, packages: updatedPackages };
-      }));
+      if (done.isLegacy) {
+        // Handle legacy package
+        const updatedLegacy = client.legacy_packages.map((p) => {
+          if (p.id !== done.packageId) return p;
+          const used = Math.min(p.sessions, (p.sessionsUsed || 0) + 1);
+          counter = `${used}/${p.sessions}`;
+          return { ...p, sessionsUsed: used };
+        });
+        await supabase.from("clients").update({ legacy_packages: updatedLegacy }).eq("id", done.clientId);
+        setClients((c) => c.map((cl) => {
+          if (cl.id !== done.clientId) return cl;
+          return { ...cl, legacy_packages: updatedLegacy };
+        }));
+      } else {
+        // Handle regular package
+        const updatedPackages = client.packages.map((p) => {
+          if (p.id !== done.packageId) return p;
+          const used = Math.min(p.sessions, p.sessionsUsed + 1);
+          counter = `${used}/${p.sessions}`;
+          return { ...p, sessionsUsed: used };
+        });
+        await supabase.from("clients").update({ packages: updatedPackages }).eq("id", done.clientId);
+        setClients((c) => c.map((cl) => {
+          if (cl.id !== done.clientId) return cl;
+          return { ...cl, packages: updatedPackages };
+        }));
+      }
     }
     if (!counter) {
       const cl = clients.find((x) => x.id === done.clientId);
-      const p = cl?.packages.find((pp) => pp.id === done.packageId);
-      if (p) counter = `${Math.min(p.sessions, p.sessionsUsed + 1)}/${p.sessions}`;
+      const p = done.isLegacy
+        ? cl?.legacy_packages?.find((pp) => pp.id === done.packageId)
+        : cl?.packages?.find((pp) => pp.id === done.packageId);
+      if (p) counter = `${Math.min(p.sessions, (p.sessionsUsed || 0) + 1)}/${p.sessions}`;
     }
-    const bonus = (done.revenue || 0) * THERAPIST_BONUS_RATE;
+    const bonus = done.isLegacy
+      ? (done.revenue || 0) * THERAPIST_BONUS_RATE
+      : (done.revenue || 0) * THERAPIST_BONUS_RATE;
     log("session_done",
       `Session completed: ${done.clientName} (${done.service}) with ${done.therapist} — session ${counter} · bonus ${fmtEuro(bonus)} (${fmtEuro(done.revenue)})`);
   };
@@ -933,7 +958,7 @@ function Clients({ clients, bookings, onAdd, onEdit, onDelete }) {
 
 function ClientFormModal({ mode, client, bookings, onClose, onSubmit }) {
   const blankPkg = () => ({ key: uid(), id: null, service: SERVICES[0], sessions: "", paid: "" });
-  const blankLegacy = () => ({ key: uid(), service: SERVICES[0], sessions: "", paid: "", therapist: THERAPISTS[0].name });
+  const blankLegacy = () => ({ key: uid(), id: uid(), service: SERVICES[0], sessions: "", paid: "", therapist: THERAPISTS[0].name, sessionsUsed: 0 });
   const isEdit = mode === "edit";
 
   const [name, setName] = useState(isEdit ? client.name : "");
@@ -946,7 +971,7 @@ function ClientFormModal({ mode, client, bookings, onClose, onSubmit }) {
   );
   const [legacyPkgs, setLegacyPkgs] = useState(
     isEdit && client.legacy_packages
-      ? client.legacy_packages.map((p) => ({ key: uid(), service: p.service, sessions: String(p.sessions), paid: String(p.paid || ""), therapist: p.therapist }))
+      ? client.legacy_packages.map((p) => ({ key: uid(), id: p.id || uid(), service: p.service, sessions: String(p.sessions), paid: String(p.paid || ""), therapist: p.therapist, sessionsUsed: p.sessionsUsed || 0 }))
       : []
   );
 
@@ -972,14 +997,14 @@ function ClientFormModal({ mode, client, bookings, onClose, onSubmit }) {
   const grandTotal = validPkgs.reduce((s, p) => s + Number(p.paid), 0);
 
   const submit = () => {
-    if (!name.trim() || validPkgs.length === 0) return;
+    if (!name.trim() || (validPkgs.length === 0 && validLegacy.length === 0)) return;
     const validLegacy = legacyPkgs.filter((p) => Number(p.sessions) > 0 && p.paid !== "" && Number(p.paid) >= 0);
     onSubmit({
       name: name.trim(),
       phone,
       soldBy,
       packages: validPkgs.map((p) => ({ id: p.id || undefined, service: p.service, sessions: p.sessions, paid: p.paid })),
-      legacy_packages: validLegacy.length > 0 ? validLegacy.map((p) => ({ service: p.service, sessions: Number(p.sessions), paid: Number(p.paid), therapist: p.therapist })) : [],
+      legacy_packages: validLegacy.length > 0 ? validLegacy.map((p) => ({ id: p.id, service: p.service, sessions: Number(p.sessions), paid: Number(p.paid), therapist: p.therapist, sessionsUsed: p.sessionsUsed || 0 })) : [],
     });
   };
 
@@ -1243,9 +1268,11 @@ function CalendarView({ bookings, clients, onAdd, onComplete, onCancel, onMove, 
 
 function BookingModal({ clients, bookings, date, preset, onClose, onSave }) {
   const firstClient = clients[0];
+  const firstPkg = firstClient?.packages?.[0] || firstClient?.legacy_packages?.[0];
   const [f, setF] = useState({
     clientId: firstClient?.id || "",
-    packageId: firstClient?.packages?.[0]?.id || "",
+    packageId: firstPkg?.id || "",
+    isLegacy: !firstClient?.packages?.[0],
     therapist: THERAPISTS[0].name,
     room: preset?.room || ROOMS[0],
     date,
@@ -1255,11 +1282,15 @@ function BookingModal({ clients, bookings, date, preset, onClose, onSave }) {
 
   const client = clients.find((c) => c.id === f.clientId);
   const clientPkgs = client?.packages || [];
-  const selectedPkg = clientPkgs.find((p) => p.id === f.packageId);
+  const clientLegacyPkgs = client?.legacy_packages || [];
+  const selectedPkg = f.isLegacy
+    ? clientLegacyPkgs.find((p) => p.id === f.packageId)
+    : clientPkgs.find((p) => p.id === f.packageId);
 
   const onClientChange = (id) => {
     const c = clients.find((x) => x.id === id);
-    setF({ ...f, clientId: id, packageId: c?.packages?.[0]?.id || "" });
+    const firstPkg = c?.packages?.[0] || c?.legacy_packages?.[0];
+    setF({ ...f, clientId: id, packageId: firstPkg?.id || "", isLegacy: !c?.packages?.[0] });
   };
 
   const clash = bookings.find((b) =>
@@ -1294,17 +1325,17 @@ function BookingModal({ clients, bookings, date, preset, onClose, onSave }) {
         </select>
       </Field>
       <Field label="Package (service)">
-        {clientPkgs.length === 0 ? (
+        {clientPkgs.length === 0 && clientLegacyPkgs.length === 0 ? (
           <div style={{ ...S.input, color: "#8a8a83" }}>No packages</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {clientPkgs.map((p) => {
               const booked = bookings.filter((b) => b.packageId === p.id && b.status === "booked").length;
               const left = p.sessions - p.sessionsUsed - booked;
-              const active = f.packageId === p.id;
+              const active = f.packageId === p.id && !f.isLegacy;
               return (
                 <button key={p.id} className="mini"
-                  onClick={() => setF({ ...f, packageId: p.id })}
+                  onClick={() => setF({ ...f, packageId: p.id, isLegacy: false })}
                   style={{
                     ...S.pkgSelectRow,
                     borderColor: active ? GOLD : "#2a2a26",
@@ -1313,6 +1344,30 @@ function BookingModal({ clients, bookings, date, preset, onClose, onSave }) {
                   <span style={{ color: active ? "#f1ead6" : "#cfcfc8", fontWeight: 600, fontSize: 13.5 }}>{p.service}</span>
                   <span style={{ fontSize: 12, color: left > 0 ? GOLD_LIGHT : "#f87171" }}>
                     {left} left · {fmtEuro(p.perSession)}
+                  </span>
+                </button>
+              );
+            })}
+            {clientLegacyPkgs.length > 0 && clientPkgs.length > 0 && (
+              <div style={{ height: 1, background: "#2a2a26", margin: "4px 0" }} />
+            )}
+            {clientLegacyPkgs.map((p) => {
+              const booked = bookings.filter((b) => b.packageId === p.id && b.status === "booked").length;
+              const left = p.sessions - (p.sessionsUsed || 0) - booked;
+              const perSession = Number(p.paid) > 0 ? Number(p.paid) / Number(p.sessions) : 0;
+              const active = f.packageId === p.id && f.isLegacy;
+              return (
+                <button key={p.id} className="mini"
+                  onClick={() => setF({ ...f, packageId: p.id, isLegacy: true })}
+                  style={{
+                    ...S.pkgSelectRow,
+                    borderColor: active ? GOLD : "#2a2a26",
+                    background: active ? "rgba(201,162,39,0.1)" : "transparent",
+                    opacity: 0.85,
+                  }}>
+                  <span style={{ color: active ? "#f1ead6" : "#cfcfc8", fontWeight: 600, fontSize: 13.5 }}>{p.service} <span style={{ fontSize: 11, color: "#8a8a83" }}>(legacy)</span></span>
+                  <span style={{ fontSize: 12, color: left > 0 ? GOLD_LIGHT : "#f87171" }}>
+                    {left} left · {fmtEuro(perSession)}
                   </span>
                 </button>
               );
@@ -1766,10 +1821,16 @@ function Revenue({ bookings, clients }) {
       .filter((p) => p.therapist === t.name)
       .reduce((s, p) => s + p.sessions, 0);
 
-    // Legacy bonus: 30% of the total paid for legacy packages (not per-session revenue)
+    // Legacy bonus: 30% of per-session cost for sessions used only
     const legacyBonus = clients.flatMap((c) => c.legacy_packages || [])
       .filter((p) => p.therapist === t.name)
-      .reduce((s, p) => s + ((Number(p.paid) || 0) * THERAPIST_BONUS_RATE), 0);
+      .reduce((s, p) => {
+        const sessionsUsed = p.sessionsUsed || 0;
+        const totalSessions = Number(p.sessions) || 1;
+        const perSession = Number(p.paid) > 0 ? Number(p.paid) / totalSessions : 0;
+        const usedBonus = sessionsUsed * perSession * THERAPIST_BONUS_RATE;
+        return s + usedBonus;
+      }, 0);
 
     // Count of each service performed
     const byService = {};
