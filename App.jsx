@@ -1594,12 +1594,13 @@ function Overview({ clients, bookings }) {
           revenue: b.revenue || 0,
           therapist: b.therapist,
           room: b.room,
+          isLegacy: b.isLegacy || false,
         })),
         summary: {
           totalClients: clients.length,
           sessionsDone: filteredBookings.filter((b) => b.status === "done").length,
           cancellations: filteredBookings.filter((b) => b.status === "cancelled").length,
-          totalRevenue: filteredBookings.filter((b) => b.status === "done").reduce((s, b) => s + b.revenue, 0),
+          totalRevenue: filteredBookings.filter((b) => b.status === "done" && !b.isLegacy).reduce((s, b) => s + b.revenue, 0),
           backupDate: new Date().toISOString(),
         },
       };
