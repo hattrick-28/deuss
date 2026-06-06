@@ -1948,6 +1948,11 @@ function Revenue({ bookings, clients }) {
                   <div style={{ fontSize: 12, color: "#a8a8a0", marginBottom: 6 }}>
                     {r.regularSessions} sessions × {fmtEuro(r.earned > 0 ? r.earned / r.regularSessions : 0)}/session × 30% = {fmtEuro(r.regularBonus)}{r.legacyBonus > 0 && ` + legacy ${fmtEuro(r.legacyBonus)}`}
                   </div>
+                  {r.legacyBonus > 0 && (
+                    <div style={{ fontSize: 11.5, color: GOLD_LIGHT, marginBottom: 6, fontWeight: 600 }}>
+                      Total bonus: {fmtEuro(r.bonus)}
+                    </div>
+                  )}
                   <div style={S.progressTrack}>
                     <div style={{ ...S.progressFill, width: `${(r.earned / maxEarned) * 100}%`, background: `linear-gradient(90deg, ${r.color}aa, ${r.color})` }} />
                   </div>
